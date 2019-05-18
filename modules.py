@@ -92,7 +92,7 @@ class ClassificationModel(nn.Module):
 
         if labels is not None:
             loss_function = nn.CrossEntropyLoss()
-            loss = loss_function(logits.view(-1, self.n_labels), labels.view(-1))
+            loss = loss_function(logits, labels)
             return loss, logits
         else:
             return logits

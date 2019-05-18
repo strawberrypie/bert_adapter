@@ -64,7 +64,7 @@ if __name__ == '__main__':
     model.eval()
     model.to(device)
 
-    optimizer = Adam(model.learnable_parameters(), lr=0.001, amsgrad=True)
+    optimizer = Adam(model.parameters(), lr=0.001, amsgrad=True)
 
     print('Model have initialized')
     for i in range(args.num_epochs):
@@ -73,7 +73,12 @@ if __name__ == '__main__':
             optimizer.zero_grad()
 
             input_ids, input_mask, segment_ids = batch['x']
+            input_ids = input_ids.to(device)
+            input_mask = input_mask.to(device)
+            segment_ids = segment_ids.to(device)
+
             y = batch['y']
+            y = y.to(device)
 
             loss, _ = model.forward(input_ids, input_mask, segment_ids, labels=y)
             loss.backward()
@@ -83,7 +88,7 @@ if __name__ == '__main__':
         model.eval()
         labels = []
         predictions = []
-        for batch in test_loader:
+        for batch in tqdm(test_loader):
             optimizer.zero_grad()
 
             input_ids, input_mask, segment_ids = batch['x']

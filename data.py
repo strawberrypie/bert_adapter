@@ -36,9 +36,9 @@ class TokenizedDataFrameDataset(Dataset):
     def preprocess_text(self, text: str) -> BertInput:
         tokens = self.tokenizer.tokenize(text)
         tokens = ["[CLS]"] + tokens + ["[SEP]"]
-        input_ids = self.tokenizer.convert_tokens_to_ids(tokens)
+        input_ids = self.tokenizer.convert_tokens_to_ids(tokens)[:self.max_seq_len]
 
-        segment_ids = [0] * len(tokens)
+        segment_ids = [0] * len(input_ids)
         input_mask = [1] * len(input_ids)
 
         padding = [0] * (self.max_seq_len - len(input_ids))
@@ -46,16 +46,15 @@ class TokenizedDataFrameDataset(Dataset):
         input_mask += padding
         segment_ids += padding
 
-        assert len(input_ids) == self.max_seq_len
-        assert len(input_mask) == self.max_seq_len
-        assert len(segment_ids) == self.max_seq_len
-
+        assert len(input_ids) == self.max_seq_len, f'{len(input_ids)} != {self.max_seq_len}'
+        assert len(input_mask) == self.max_seq_len, f'{len(input_mask)} != {self.max_seq_len}'
+        assert len(segment_ids) == self.max_seq_len, f'{len(segment_ids)} != {self.max_seq_len}'
         return BertInput(*[torch.LongTensor(_) for _ in [input_ids, input_mask, segment_ids]])
 
     def preprocess_label(self, label: int):
         result = torch.zeros(len(self.y_labels))
         result[label] = 1
-        return result
+        return torch.LongTensor(result)
 
     def __getitem__(self, index) -> dict:
         sample = self.df.iloc[index]
