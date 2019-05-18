@@ -1,1 +1,3 @@
 tensorboardX
+pytorch_pretrained_bert
+tqdm
