@@ -57,6 +57,9 @@ class BertAdaptedSelfOutput(nn.Module):
 def adapt_bert_self_output(config: AdapterConfig):
     return lambda self_output: BertAdaptedSelfOutput(self_output, config=config)
 
+def adapt_bert_output(config: AdapterConfig):
+    return lambda self_output: BertAdaptedSelfOutput(self_output, config=config)
+
 
 def add_adapters(bert_model: BertModel,
                  config: AdapterConfig) -> BertModel:
@@ -64,6 +67,8 @@ def add_adapters(bert_model: BertModel,
     for i in range(len(bert_model.encoder.layer)):
         bert_encoder.layer[i].attention.output = adapt_bert_self_output(config)(
             bert_encoder.layer[i].attention.output)
+        bert_encoder.layer[i].output = adapt_bert_output(config)(
+            bert_encoder.layer[i].output)
 
     # Freeze all parameters
     for param in bert_model.parameters():
