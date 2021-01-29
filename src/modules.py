@@ -3,7 +3,8 @@ from typing import NamedTuple, Callable, Union
 
 import torch
 import torch.nn as nn
-from pytorch_pretrained_bert.modeling import ACT2FN, BertLayerNorm, BertModel, BertSelfOutput
+from transformers import BertModel
+from transformers.models.bert.modeling_bert import ACT2FN, BertSelfOutput
 
 logging.basicConfig(level=logging.INFO)
 
@@ -57,6 +58,7 @@ class BertAdaptedSelfOutput(nn.Module):
 def adapt_bert_self_output(config: AdapterConfig):
     return lambda self_output: BertAdaptedSelfOutput(self_output, config=config)
 
+
 def adapt_bert_output(config: AdapterConfig):
     return lambda self_output: BertAdaptedSelfOutput(self_output, config=config)
 
@@ -75,7 +77,7 @@ def add_adapters(bert_model: BertModel,
         param.requires_grad = False
     # Unfreeze trainable parts — layer norms and adapters
     for name, sub_module in bert_model.named_modules():
-        if isinstance(sub_module, (Adapter, BertLayerNorm)):
+        if isinstance(sub_module, (Adapter, nn.LayerNorm)):
             for param_name, param in sub_module.named_parameters():
                 param.requires_grad = True
     return bert_model

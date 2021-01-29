@@ -1,3 +1,6 @@
-tensorboardX
-pytorch_pretrained_bert
-tqdm
+fire==0.4.0
+pandas==1.2.1
+tensorboardX==2.1
+torch==1.7.1
+transformers==4.2.2
+tqdm==4.56.0

@@ -3,7 +3,7 @@ from typing import NamedTuple
 import torch
 import pandas as pd
 from torch.utils.data import Dataset
-from pytorch_pretrained_bert import BertTokenizer
+from transformers import BertTokenizer
 
 
 class BertInput(NamedTuple):
@@ -15,28 +15,26 @@ class BertInput(NamedTuple):
 class TokenizedDataFrameDataset(Dataset):
     def __init__(self,
                  tokenizer: BertTokenizer,
-                 file_path: str,
+                 df: pd.DataFrame,
                  x_label: str = 'text',
                  y_label: str = 'label',
                  max_seq_len: int = 20):
-        """
-        :param data_path: path to data
-        """
         self.tokenizer = tokenizer
-        self.x_label = x_label
-        self.y_label = y_label
         self.max_seq_len = max_seq_len
 
-        self.df = pd.read_csv(file_path)
-        self.df[y_label] = self.df[y_label].astype('category')
+        self.x = df[x_label]
+        self.length = len(self.x)
 
-        self.y_labels = self.df[y_label].cat.categories
-        self.df[y_label] = self.df[y_label].cat.codes
+        self.y = df[y_label].astype('category')
+        self.n_classes = len(self.y.cat.categories)
+        self.y = self.y.cat.codes
 
     def preprocess_text(self, text: str) -> BertInput:
         tokens = self.tokenizer.tokenize(text)
+        tokens = tokens[:self.max_seq_len]
         tokens = ["[CLS]"] + tokens + ["[SEP]"]
-        input_ids = self.tokenizer.convert_tokens_to_ids(tokens)[:self.max_seq_len]
+
+        input_ids = self.tokenizer.convert_tokens_to_ids(tokens)
 
         segment_ids = [0] * len(input_ids)
         input_mask = [1] * len(input_ids)
@@ -49,21 +47,34 @@ class TokenizedDataFrameDataset(Dataset):
         assert len(input_ids) == self.max_seq_len, f'{len(input_ids)} != {self.max_seq_len}'
         assert len(input_mask) == self.max_seq_len, f'{len(input_mask)} != {self.max_seq_len}'
         assert len(segment_ids) == self.max_seq_len, f'{len(segment_ids)} != {self.max_seq_len}'
-        return BertInput(*[torch.LongTensor(_) for _ in [input_ids, input_mask, segment_ids]])
+
+        return BertInput(
+            input_ids=torch.LongTensor(input_ids),
+            input_mask=torch.LongTensor(input_mask),
+            segment_ids=torch.LongTensor(segment_ids)
+        )
 
     def preprocess_label(self, label: int):
-        result = torch.zeros(len(self.y_labels)).long()
+        result = torch.zeros(self.n_classes).long()
         result[label] = 1
         return result
 
     def __getitem__(self, index) -> dict:
-        sample = self.df.iloc[index]
-        x = sample[self.x_label]
-        y = sample[self.y_label]
+        x = self.x.iloc[index]
+        y = self.y.iloc[index]
         return {
             'x': self.preprocess_text(x),
             'y': self.preprocess_label(y)
         }
 
     def __len__(self):
-        return len(self.df)
+        return self.length
+
+    @staticmethod
+    def from_file(tokenizer: BertTokenizer,
+                  file_path: str,
+                  x_label: str = 'text',
+                  y_label: str = 'label',
+                  max_seq_len: int = 20):
+        df = pd.read_csv(file_path)
+        return TokenizedDataFrameDataset(tokenizer, df, x_label, y_label, max_seq_len)
