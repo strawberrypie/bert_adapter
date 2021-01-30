@@ -32,7 +32,7 @@ class Adapter(nn.Module):
         nn.init.normal_(self.up_project.weight, std=config.adapter_initializer_range)
         nn.init.zeros_(self.up_project.bias)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor):
         down_projected = self.down_project(hidden_states)
         activated = self.activation(down_projected)
         up_projected = self.up_project(activated)
@@ -47,7 +47,7 @@ class BertAdaptedSelfOutput(nn.Module):
         self.self_output = self_output
         self.adapter = Adapter(config)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor):
         hidden_states = self.self_output.dense(hidden_states)
         hidden_states = self.self_output.dropout(hidden_states)
         hidden_states = self.adapter(hidden_states)
@@ -59,50 +59,23 @@ def adapt_bert_self_output(config: AdapterConfig):
     return lambda self_output: BertAdaptedSelfOutput(self_output, config=config)
 
 
-def adapt_bert_output(config: AdapterConfig):
-    return lambda self_output: BertAdaptedSelfOutput(self_output, config=config)
+def add_adapters(bert_model: BertModel, config: AdapterConfig) -> BertModel:
+    for layer in bert_model.encoder.layer:
+        layer.attention.output = adapt_bert_self_output(config)(layer.attention.output)
+        layer.output = adapt_bert_self_output(config)(layer.output)
+    return bert_model
 
 
-def add_adapters(bert_model: BertModel,
-                 config: AdapterConfig) -> BertModel:
-    bert_encoder = bert_model.encoder
-    for i in range(len(bert_model.encoder.layer)):
-        bert_encoder.layer[i].attention.output = adapt_bert_self_output(config)(
-            bert_encoder.layer[i].attention.output)
-        bert_encoder.layer[i].output = adapt_bert_output(config)(
-            bert_encoder.layer[i].output)
-
-    # Freeze all parameters
-    for param in bert_model.parameters():
+def freeze_all_parameters(model: nn.Module) -> nn.Module:
+    for param in model.parameters():
         param.requires_grad = False
+    return model
+
+
+def unfreeze_adapters(bert_model: BertModel) -> BertModel:
     # Unfreeze trainable parts — layer norms and adapters
     for name, sub_module in bert_model.named_modules():
         if isinstance(sub_module, (Adapter, nn.LayerNorm)):
             for param_name, param in sub_module.named_parameters():
                 param.requires_grad = True
     return bert_model
-
-
-class ClassificationModel(nn.Module):
-    def __init__(self, bert: BertModel, n_labels: int, dropout_prob: float):
-        super(ClassificationModel, self).__init__()
-        self.n_labels = n_labels
-        self.bert = bert
-
-        self.dropout = nn.Dropout(dropout_prob)
-        self.classifier = nn.Linear(bert.pooler.dense.out_features, n_labels)
-
-    def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None):
-        _, pooled_output = self.bert(input_ids, token_type_ids, attention_mask,
-                                     output_all_encoded_layers=False)
-        pooled_output = self.dropout(pooled_output)
-        logits = self.classifier(pooled_output)
-
-        if labels is not None:
-            loss_function = nn.CrossEntropyLoss()
-            if len(labels.shape) > 1:
-                labels = torch.argmax(labels, dim=1)
-            loss = loss_function(logits, labels)
-            return loss, logits
-        else:
-            return logits
