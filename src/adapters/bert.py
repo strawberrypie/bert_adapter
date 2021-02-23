@@ -1,24 +1,19 @@
 import logging
-from typing import NamedTuple, Callable, Union
 
 import torch
 import torch.nn as nn
 from transformers import BertModel
 from transformers.models.bert.modeling_bert import ACT2FN, BertSelfOutput
 
+from adapters.common import AdapterConfig
+
+
 logging.basicConfig(level=logging.INFO)
 
 
-class AdapterConfig(NamedTuple):
-    hidden_size: int
-    adapter_size: int
-    adapter_act: Union[str, Callable]
-    adapter_initializer_range: float
-
-
-class Adapter(nn.Module):
+class BertAdapter(nn.Module):
     def __init__(self, config: AdapterConfig):
-        super(Adapter, self).__init__()
+        super(BertAdapter, self).__init__()
         self.down_project = nn.Linear(config.hidden_size, config.adapter_size)
         nn.init.normal_(self.down_project.weight, std=config.adapter_initializer_range)
         nn.init.zeros_(self.down_project.bias)
@@ -45,7 +40,7 @@ class BertAdaptedSelfOutput(nn.Module):
                  config: AdapterConfig):
         super(BertAdaptedSelfOutput, self).__init__()
         self.self_output = self_output
-        self.adapter = Adapter(config)
+        self.adapter = BertAdapter(config)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor):
         hidden_states = self.self_output.dense(hidden_states)
@@ -59,23 +54,17 @@ def adapt_bert_self_output(config: AdapterConfig):
     return lambda self_output: BertAdaptedSelfOutput(self_output, config=config)
 
 
-def add_adapters(bert_model: BertModel, config: AdapterConfig) -> BertModel:
+def add_bert_adapters(bert_model: BertModel, config: AdapterConfig) -> BertModel:
     for layer in bert_model.encoder.layer:
         layer.attention.output = adapt_bert_self_output(config)(layer.attention.output)
         layer.output = adapt_bert_self_output(config)(layer.output)
     return bert_model
 
 
-def freeze_all_parameters(model: nn.Module) -> nn.Module:
-    for param in model.parameters():
-        param.requires_grad = False
-    return model
-
-
-def unfreeze_adapters(bert_model: BertModel) -> BertModel:
+def unfreeze_bert_adapters(bert_model: nn.Module) -> nn.Module:
     # Unfreeze trainable parts — layer norms and adapters
     for name, sub_module in bert_model.named_modules():
-        if isinstance(sub_module, (Adapter, nn.LayerNorm)):
+        if isinstance(sub_module, (BertAdapter, nn.LayerNorm)):
             for param_name, param in sub_module.named_parameters():
                 param.requires_grad = True
     return bert_model

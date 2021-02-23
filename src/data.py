@@ -1,4 +1,3 @@
-import torch
 import pandas as pd
 from torch.utils.data import Dataset
 
@@ -15,18 +14,10 @@ class DataFrameTextClassificationDataset(Dataset):
         self.n_classes = len(self.y.cat.categories)
         self.y = self.y.cat.codes
 
-    def preprocess_label(self, label: int):
-        result = torch.zeros(self.n_classes).long()
-        result[label] = 1
-        return result
-
     def __getitem__(self, index) -> dict:
         x = self.x.iloc[index]
         y = self.y.iloc[index]
-        return {
-            'x': x,
-            'y': self.preprocess_label(y)
-        }
+        return {'x': str(x), 'y': int(y)}
 
     def __len__(self):
         return self.length
