@@ -47,14 +47,17 @@ def train(
                                                         n_classes=train_dataset.n_classes,
                                                         lr=lr)
     if adapter_size is not None:
-        # Add adapters and freeze all initial layers
+        # Add adapters and freeze all layers
         config = AdapterConfig(
             hidden_size=768, adapter_size=adapter_size,
             adapter_act='relu', adapter_initializer_range=1e-2
         )
         model.model.bert = add_bert_adapters(model.model.bert, config)
         model.model.bert = freeze_all_parameters(model.model.bert)
+
+        # Unfreeze adapters and the classifier head
         model.model.bert = unfreeze_bert_adapters(model.model.bert)
+        model.model.classifier.requires_grad = True
     else:
         print("Warning! BERT adapters aren't used because adapter_size wasn't specified.")
 
